@@ -105,6 +105,44 @@ class AIProvider {
         : null
     };
   }
+
+  // Search for jobs using Perplexity AI (real-time search)
+  async searchJobs(query) {
+    // Prefer Perplexity for job searches (real-time data)
+    if (this.perplexityApiKey) {
+      try {
+        console.log('🔍 Searching jobs with Perplexity AI...');
+        const searchPrompt = `${query}
+
+Please provide a list of current job openings with the following format for each job:
+- Company Name
+- Job Title
+- Location
+- Job Description (brief)
+- Application URL (if available)
+
+Focus on recent and active postings.`;
+
+        return await this.generateWithPerplexity(searchPrompt);
+      } catch (error) {
+        console.error('⚠️ Perplexity job search failed:', error.message);
+        // Fallback to Gemini
+        if (this.geminiClient) {
+          console.log('🔄 Falling back to Gemini for job search');
+          return await this.generateWithGemini(query);
+        }
+        throw error;
+      }
+    }
+
+    // Use Gemini if Perplexity not available (less accurate for real-time jobs)
+    if (this.geminiClient) {
+      console.log('⚠️ Using Gemini for job search (may not have real-time data)');
+      return await this.generateWithGemini(query);
+    }
+
+    throw new Error('No AI provider configured for job search');
+  }
 }
 
 module.exports = new AIProvider();
