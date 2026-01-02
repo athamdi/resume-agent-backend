@@ -167,38 +167,86 @@ function extractJobsFromText(responseText, companies, roleKeywords) {
 // Search for jobs at target companies with AI-powered fit scoring
 router.post('/search', async (req, res) => {
   try {
-    const { userId, companies, roleKeywords } = req.body;
+    // Support both frontend format (keywords, candidateProfile) and backend format (userId, roleKeywords)
+    const { 
+      userId, 
+      companies, 
+      roleKeywords, 
+      keywords, 
+      location, 
+      mustHaveSkills,
+      workType,
+      candidateProfile 
+    } = req.body;
 
-    if (!userId || !companies || !roleKeywords) {
+    // Normalize parameters to support both formats
+    const searchCompanies = companies || [];
+    const searchRoles = roleKeywords || keywords || [];
+    const userIdToUse = userId || candidateProfile?.userId;
+
+    if (!searchCompanies || searchCompanies.length === 0 || !searchRoles || searchRoles.length === 0) {
       return res.status(400).json({ 
         success: false, 
-        error: 'userId, companies, and roleKeywords are required' 
+        error: 'companies and keywords/roleKeywords are required' 
       });
     }
 
-    // Get user's CV data
-    const { data: cvData, error: cvError } = await supabase
-      .from('cv_data')
-      .select('*')
-      .eq('user_id', userId)
-      .single();
+    // Get user's CV data if userId provided
+    let cvData = null;
+    if (userIdToUse) {
+      const { data, error: cvError } = await supabase
+        .from('cv_data')
+        .select('*')
+        .eq('user_id', userIdToUse)
+        .single();
 
-    if (cvError || !cvData) {
+      if (!cvError && data) {
+        cvData = data;
+      }
+    }
+
+    // If no CV data but candidateProfile provided, use that
+    if (!cvData && candidateProfile) {
+      cvData = {
+        name: candidateProfile.name || 'Candidate',
+        email: candidateProfile.email || '',
+        skills: candidateProfile.skills || { technical: [], soft: [] },
+        experience: candidateProfile.experience || [],
+        education: candidateProfile.education || []
+      };
+    }
+
+    if (!cvData) {
       return res.status(404).json({ 
         success: false, 
-        error: 'CV not found. Please upload your CV first.' 
+        error: 'CV not found. Please upload your CV first or provide candidateProfile.' 
       });
     }
 
-    console.log(`🔍 Searching jobs for ${companies.length} companies with AI-powered matching...`);
+    console.log(`🔍 Searching jobs for ${searchCompanies.length} companies with AI-powered matching...`);
+
+    // Build enhanced search query with filters
+    let searchQuery = `Find current job openings for these roles: ${searchRoles.join(', ')} at these companies: ${searchCompanies.join(', ')}.`;
+    
+    if (location) {
+      searchQuery += ` Location: ${location}.`;
+    }
+    
+    if (mustHaveSkills && mustHaveSkills.length > 0) {
+      searchQuery += ` Required skills: ${mustHaveSkills.join(', ')}.`;
+    }
+    
+    if (workType) {
+      searchQuery += ` Work type: ${workType}.`;
+    }
+    
+    searchQuery += ' Include job title, company, description, location, and application URL.';
 
     // Search for real jobs using Perplexity AI
     let foundJobs = [];
     try {
-      const searchQuery = `Find current job openings for these roles: ${roleKeywords.join(', ')} at these companies: ${companies.join(', ')}. Include job title, company, description, location, and application URL.`;
-      
       const aiResponse = await aiProvider.searchJobs(searchQuery);
-      foundJobs = extractJobsFromText(aiResponse, companies, roleKeywords);
+      foundJobs = extractJobsFromText(aiResponse, searchCompanies, searchRoles);
       
       console.log(`✅ Found ${foundJobs.length} jobs via AI search`);
     } catch (searchError) {
