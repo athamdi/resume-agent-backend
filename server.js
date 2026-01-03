@@ -7,17 +7,35 @@ const PORT = process.env.PORT || 3000;
 
 // CORS configuration for frontend
 app.use(cors({
-  origin: [
-    'http://localhost:5173',
-    'http://localhost:3000', 
-    'https://role-compass-path.lovable.app',
-    'https://role-compass-path-production.up.railway.app',
-    /\.lovable\.app$/,  // Allow all Lovable subdomains
-    /\.railway\.app$/   // Allow all Railway subdomains
-  ],
+  origin: function (origin, callback) {
+    // Allow requests with no origin (like mobile apps or curl)
+    if (!origin) return callback(null, true);
+    
+    // Allow all Lovable domains
+    if (origin.includes('lovable.app') || 
+        origin.includes('lovable.dev') ||
+        origin.includes('railway.app') ||
+        origin.includes('localhost')) {
+      return callback(null, true);
+    }
+    
+    // Allow specific domains
+    const allowedOrigins = [
+      'http://localhost:5173',
+      'http://localhost:3000',
+      'https://role-compass-path.lovable.app'
+    ];
+    
+    if (allowedOrigins.includes(origin)) {
+      return callback(null, true);
+    }
+    
+    callback(new Error('Not allowed by CORS'));
+  },
   credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization']
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
+  exposedHeaders: ['Content-Length', 'Content-Type']
 }));
 
 app.use(express.json({ limit: '10mb' }));
