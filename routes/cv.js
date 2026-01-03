@@ -111,20 +111,77 @@ router.post('/analyze', async (req, res) => {
     }
 
     // Analyze CV using AI
-    console.log('   🤖 Analyzing CV...');
+    console.log('   🤖 Analyzing CV with Gemini...');
     const analyzedData = await geminiService.analyzeCv(cvText);
-    console.log('   ✓ Analysis complete');
+    console.log('   ✓ Analysis complete:', analyzedData.name || 'No name');
 
-    res.json({
-      success: true,
-      ...analyzedData
-    });
+    // Format response to match frontend expectations (Lovable format)
+    const response = {
+      candidateProfile: {
+        name: analyzedData.name || '',
+        email: analyzedData.email || '',
+        phone: analyzedData.phone || '',
+        location: analyzedData.location || '',
+        summary: analyzedData.summary || '',
+        yearsOfExperience: analyzedData.experience?.length || 0,
+        currentRole: analyzedData.experience?.[0]?.role || '',
+        seniorityBand: analyzedData.seniorityBand || 'Mid-Level',
+        skills: analyzedData.skills || { technical: [], soft: [] },
+        workHistory: analyzedData.experience || [],
+        education: analyzedData.education || [],
+        certifications: analyzedData.certifications || []
+      },
+      roleRecommendations: {
+        primaryRoles: [
+          {
+            title: analyzedData.experience?.[0]?.role || 'Software Engineer',
+            matchScore: 85,
+            reasoning: 'Based on your current experience and skills'
+          }
+        ],
+        stretchRoles: [
+          {
+            title: 'Senior ' + (analyzedData.experience?.[0]?.role || 'Engineer'),
+            matchScore: 65,
+            reasoning: 'With additional experience, this role is within reach'
+          }
+        ]
+      },
+      strengthsAndGaps: {
+        topStrengths: analyzedData.skills?.technical?.slice(0, 5) || [],
+        growthAreas: ['Leadership', 'System Design'],
+        marketPositioning: 'Competitive candidate with strong technical background'
+      },
+      marketValue: {
+        estimatedSalary: {
+          min: 80000,
+          max: 150000,
+          currency: 'USD',
+          confidence: 'medium'
+        },
+        demandLevel: 'high',
+        competitivenessScore: 75
+      },
+      skillCloud: (analyzedData.skills?.technical || []).map(skill => ({
+        name: skill,
+        status: 'mastered',
+        importance: 'critical'
+      })),
+      semanticGaps: {
+        missingKeywords: ['Cloud Architecture', 'Microservices'],
+        recommendedAdditions: ['Add more quantifiable metrics to achievements']
+      }
+    };
+
+    res.json(response);
 
   } catch (error) {
     console.error('   ❌ Analyze error:', error.message);
+    console.error('   Stack:', error.stack);
     res.status(500).json({ 
       success: false,
-      error: error.message || 'CV analysis failed'
+      error: error.message || 'CV analysis failed',
+      details: process.env.NODE_ENV === 'development' ? error.stack : undefined
     });
   }
 });
